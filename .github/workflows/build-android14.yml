@@ -1,0 +1,50 @@
+name: Build Headswap APK (Android 14 Ready)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Clonar código del repositorio
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 3. Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 4. Inyectar certificados SSL (JVC y HUR) y ajustar SDK para Android 14
+        run: |
+          mkdir -p android/app/src/main/assets/aa/jvc
+          mkdir -p android/app/src/main/assets/aa/hur
+          curl -sL https://raw.githubusercontent.com/f1xpl/aasdk/development/cert/headunit.crt -o android/app/src/main/assets/aa/jvc/cert.pem
+          curl -sL https://raw.githubusercontent.com/f1xpl/aasdk/development/cert/headunit.key -o android/app/src/main/assets/aa/jvc/key.pem
+          cp android/app/src/main/assets/aa/jvc/cert.pem android/app/src/main/assets/aa/hur/cert.pem
+          cp android/app/src/main/assets/aa/jvc/key.pem android/app/src/main/assets/aa/hur/key.pem
+          
+          # Asegurar compatibilidad con Android 14 (minSdk 29 / targetSdk 34)
+          sed -i 's/minSdk\s*=\s*[0-9]\+/minSdk = 29/g' android/app/build.gradle* || true
+          sed -i 's/minSdkVersion([0-9]\+)/minSdkVersion(29)/g' android/app/build.gradle* || true
+          sed -i 's/targetSdk\s*=\s*[0-9]\+/targetSdk = 34/g' android/app/build.gradle* || true
+          sed -i 's/targetSdkVersion([0-9]\+)/targetSdkVersion(34)/g' android/app/build.gradle* || true
+
+      - name: 5. Dar permisos a Gradle y compilar APK Debug firmado
+        working-directory: ./android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: 6. Subir APK listo para descargar
+        uses: actions/upload-artifact@v4
+        with:
+          name: Headswap-Android14-APK
+          path: android/app/build/outputs/apk/debug/*.apk
